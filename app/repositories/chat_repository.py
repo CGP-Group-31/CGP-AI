@@ -3,6 +3,10 @@ from app.core.db import engine
 
 
 async def get_or_create_open_thread(elder_id: int) -> int:
+    """
+    Used for normal AI chat (non-checkin).
+    Reuses latest open non-checkin thread, or creates a new one.
+    """
     find_sql = text("""
         SELECT TOP 1 ThreadID
         FROM ChatThreads
@@ -29,6 +33,9 @@ async def get_or_create_open_thread(elder_id: int) -> int:
 
 
 async def create_checkin_thread(elder_id: int, related_run_id: int) -> int:
+    """
+    Used for check-in conversations.
+    """
     sql = text("""
         INSERT INTO ChatThreads (ElderID, RelatedRunID)
         OUTPUT INSERTED.ThreadID
@@ -39,6 +46,7 @@ async def create_checkin_thread(elder_id: int, related_run_id: int) -> int:
             "elder_id": elder_id,
             "related_run_id": related_run_id
         }).scalar_one()
+
     return int(thread_id)
 
 
@@ -51,6 +59,7 @@ async def get_thread_by_run_id(run_id: int) -> int | None:
     """)
     with engine.begin() as conn:
         row = conn.execute(sql, {"run_id": run_id}).fetchone()
+
     return int(row[0]) if row else None
 
 
@@ -90,4 +99,5 @@ async def save_chat_message(
             "detected_mood_id": detected_mood_id,
             "safety_flag": safety_flag
         }).scalar_one()
+
     return int(message_id)

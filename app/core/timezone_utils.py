@@ -1,6 +1,11 @@
 import re
-from datetime import datetime, date, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
+# Supports:
+# "IST +05:30"
+# "+05:30"
+# "UTC+05:30"
+# "GMT +05:30"
 _TZ_OFFSET_RE = re.compile(r"([+-])\s*(\d{2}):(\d{2})")
 
 
@@ -23,19 +28,18 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def utc_to_local(utc_dt: datetime, offset_minutes: int) -> datetime:
-    return utc_dt + timedelta(minutes=offset_minutes)
+def local_now_from_timezone_text(tz_text: str) -> datetime:
+    offset_minutes = parse_offset_minutes(tz_text)
+    return utc_now() + timedelta(minutes=offset_minutes)
 
 
-def local_date_for_offset(offset_minutes: int) -> date:
-    return utc_to_local(utc_now(), offset_minutes).date()
+def get_checkin_window(local_dt: datetime) -> str | None:
+    hhmm = local_dt.strftime("%H:%M")
 
+    if "08:00" <= hhmm <= "11:59":
+        return "Morning"
 
-def local_time_for_offset(offset_minutes: int) -> time:
-    return utc_to_local(utc_now(), offset_minutes).time()
+    if "17:00" <= hhmm <= "23:59":
+        return "Night"
 
-
-def local_slot_to_utc(local_d: date, local_t: time, offset_minutes: int) -> datetime:
-    local_dt = datetime.combine(local_d, local_t)
-    utc_dt = local_dt - timedelta(minutes=offset_minutes)
-    return utc_dt.replace(tzinfo=timezone.utc)
+    return None

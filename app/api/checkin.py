@@ -1,18 +1,24 @@
 from fastapi import APIRouter, HTTPException
 from app.schemas.checkin import StartCheckInRequest, RespondCheckInRequest
-from app.services.checkin_service import start_checkin, get_current_checkin, respond_checkin
+from app.services.checkin_service import (
+    get_checkin_availability,
+    start_checkin,
+    get_current_checkin,
+    respond_checkin,
+)
 
 router = APIRouter(prefix="/ai/checkin", tags=["AI CheckIn"])
+
+
+@router.get("/availability/{elder_id}")
+async def api_checkin_availability(elder_id: int):
+    return await get_checkin_availability(elder_id)
 
 
 @router.post("/start")
 async def api_start_checkin(payload: StartCheckInRequest):
     try:
-        return await start_checkin(
-            run_id=payload.run_id,
-            elder_id=payload.elder_id,
-            schedule_name=payload.schedule_name
-        )
+        return await start_checkin(elder_id=payload.elder_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

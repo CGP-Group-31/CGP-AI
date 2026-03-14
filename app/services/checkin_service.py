@@ -1,27 +1,31 @@
+from app.core.timezone_utils import local_now_from_timezone_text, get_checkin_window
 from app.integrations.llm_client import ask_llm, detect_mood, CHECKIN_TEMPERATURE, CHECKIN_MAX_TOKENS
-from app.repositories.chat_repository import create_checkin_thread, get_thread_by_run_id, save_chat_message
-from app.repositories.mood_repository import get_mood_id_by_name
+from app.repositories.user_repository import get_user_timezone
 from app.repositories.checkin_repository import (
     get_run_by_id,
+    get_run_for_window,
+    create_checkin_run,
     get_current_checkin_for_elder,
     get_first_assistant_message,
-    update_run_to_waiting_user,
     complete_run,
 )
+from app.repositories.chat_repository import (
+    create_checkin_thread,
+    get_thread_by_run_id,
+    save_chat_message,
+)
+from app.repositories.mood_repository import get_mood_id_by_name
 from app.vector_store.retriever import search_memory
 from app.vector_store.embedder import embed_query
 from app.vector_store.indexer import index_message
 from app.vector_store.document_builder import build_chat_index_doc
 
 
-def _build_opening_message(schedule_name: str) -> str:
-    s = (schedule_name or "").lower()
-
-    if s == "morning":
+def _build_opening_message(window_type: str) -> str:
+    if window_type == "Morning":
         return "Good morning. How are you feeling today? Did you sleep well, and how is your energy this morning?"
-    if s == "night":
+    if window_type == "Night":
         return "Good evening. How was your day today? How are you feeling now before resting for the night?"
-
     return "Hello. How are you feeling right now?"
 
 
@@ -40,16 +44,62 @@ def _format_memory(memory: list[dict]) -> str:
     return "\n".join(lines)
 
 
-async def start_checkin(run_id: int, elder_id: int, schedule_name: str) -> dict:
-    existing_run = await get_run_by_id(run_id)
-    if not existing_run:
-        raise ValueError("CheckInRun not found.")
+async def get_checkin_availability(elder_id: int) -> dict:
+    tz_text = await get_user_timezone(elder_id)
+    local_dt = local_now_from_timezone_text(tz_text or "")
+    local_date = local_dt.date().isoformat()
+    local_time = local_dt.strftime("%H:%M")
+    window_type = get_checkin_window(local_dt)
 
-    thread_id = await get_thread_by_run_id(run_id)
-    if not thread_id:
-        thread_id = await create_checkin_thread(elder_id=elder_id, related_run_id=run_id)
+    if not window_type:
+        return {
+            "elder_id": elder_id,
+            "available": False,
+            "window_type": None,
+            "local_date": local_date,
+            "local_time": local_time,
+            "message": "No check-in window is active now."
+        }
 
-    opening_message = _build_opening_message(schedule_name)
+    existing_run = await get_run_for_window(elder_id, window_type, local_date)
+
+    if existing_run:
+        return {
+            "elder_id": elder_id,
+            "available": False,
+            "window_type": window_type,
+            "local_date": local_date,
+            "local_time": local_time,
+            "message": f"{window_type} check-in already started or completed."
+        }
+
+    return {
+        "elder_id": elder_id,
+        "available": True,
+        "window_type": window_type,
+        "local_date": local_date,
+        "local_time": local_time,
+        "message": f"{window_type} check-in is available."
+    }
+
+
+async def start_checkin(elder_id: int) -> dict:
+    availability = await get_checkin_availability(elder_id)
+    if not availability["available"]:
+        raise ValueError(availability["message"])
+
+    window_type = availability["window_type"]
+    local_date = availability["local_date"]
+
+    run_id = await create_checkin_run(
+        elder_id=elder_id,
+        window_type=window_type,
+        local_date=local_date
+    )
+
+    thread_id = await create_checkin_thread(elder_id=elder_id, related_run_id=run_id)
+
+    opening_message = _build_opening_message(window_type)
 
     assistant_message_id = await save_chat_message(
         thread_id=thread_id,
@@ -71,12 +121,12 @@ async def start_checkin(run_id: int, elder_id: int, schedule_name: str) -> dict:
     )
     await index_message(doc)
 
-    await update_run_to_waiting_user(run_id, note=f"AI started. ThreadID={thread_id}")
-
     return {
         "run_id": run_id,
         "thread_id": thread_id,
         "elder_id": elder_id,
+        "window_type": window_type,
+        "local_date": local_date,
         "message": opening_message
     }
 
@@ -98,8 +148,9 @@ async def get_current_checkin(elder_id: int) -> dict:
         "thread_id": thread_id,
         "elder_id": run["ElderID"],
         "status": run["Status"],
+        "window_type": run["WindowType"],
+        "local_date": run["LocalDate"],
         "triggered_at": run["TriggeredAt"],
-        "planned_at": run["PlannedAt"],
         "message": opening_message["Content"] if opening_message else None,
         "message_created_at": opening_message["CreatedAt"] if opening_message else None,
     }
@@ -132,20 +183,19 @@ async def respond_checkin(run_id: int, elder_id: int, message: str) -> dict:
     memory_text = _format_memory(memory)
 
     prompt = f"""
-You are responding to an elderly user's daily check-in message.
+    You are responding to TrustCare system elderly user's daily check-in message.
+    Rules:
+    - Be warm, calm, and supportive.
+    - Keep the reply short and natural.
+    - Acknowledge the user's emotional state when relevant.
+    - If something sounds serious, suggest contacting a caregiver or doctor.
 
-Rules:
-- Be warm, calm, and supportive.
-- Keep the reply short and natural.
-- Acknowledge the user's emotional state when relevant.
-- If something sounds serious, suggest contacting a caregiver or doctor.
+    Relevant past conversations:
+    {memory_text}
 
-Relevant past conversations:
-{memory_text}
-
-Current elder message:
-{message}
-"""
+    Current elder message:
+    {message}
+    """
 
     answer = await ask_llm(
         prompt=prompt,
