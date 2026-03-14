@@ -19,7 +19,6 @@ async def search_memory(elder_id: int, question: str, top_k: int = 5):
     )
 
     memory = []
-
     for r in results:
         memory.append({
             "content": r.get("content"),

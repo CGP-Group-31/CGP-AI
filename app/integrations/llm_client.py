@@ -8,16 +8,6 @@ CHAT_MAX_TOKENS = 250
 CHECKIN_TEMPERATURE = 0.4
 CHECKIN_MAX_TOKENS = 220
 
-ALLOWED_MOODS = [
-    "Happy",
-    "Neutral",
-    "Sad",
-    "Anxious",
-    "Angry",
-    "Confused",
-    "Tired"
-]
-
 
 async def _post_llm(messages: list, temperature: float, max_tokens: int) -> str:
     headers = {
@@ -90,52 +80,41 @@ async def ask_llm(
 
 
 async def detect_mood(text: str) -> str:
-    """
-    Simple rule-based mood detection for v1.
-    Deterministic and good enough for current project stage.
-    """
     if not text:
         return "Neutral"
 
     t = text.lower().strip()
-
-    # remove punctuation noise
     t = re.sub(r"[^\w\s]", " ", t)
 
     happy_words = [
-        "happy", "good", "great", "fine", "better", "glad", "calm",
-        "peaceful", "okay", "ok", "nice", "well", "enjoyed"
+        "happy", "great", "better", "glad", "calm",
+        "peaceful", "nice", "well", "enjoyed"
     ]
-
     sad_words = [
-        "sad", "lonely", "down", "depressed", "cry", "upset",
-        "hopeless", "empty", "unhappy", "hurt"
+        "sad", "lonely", "down", "depressed", "cry",
+        "upset", "hopeless", "empty", "unhappy", "hurt"
     ]
-
     anxious_words = [
-        "anxious", "worried", "nervous", "panic", "fear", "afraid",
-        "uneasy", "stressed", "tense"
+        "anxious", "worried", "nervous", "panic", "fear",
+        "afraid", "uneasy", "stressed", "tense"
     ]
-
     angry_words = [
-        "angry", "mad", "annoyed", "frustrated", "irritated",
-        "hate", "furious"
+        "angry", "mad", "annoyed", "frustrated",
+        "irritated", "hate", "furious"
     ]
-
     confused_words = [
-        "confused", "unsure", "don't know", "cannot understand",
-        "forgot", "forget", "lost", "mixed up"
+        "confused", "unsure", "don't know",
+        "cannot understand", "forgot", "forget",
+        "lost", "mixed up"
     ]
-
     tired_words = [
-        "tired", "weak", "sleepy", "exhausted", "fatigued",
-        "no energy", "low energy", "drained"
+        "tired", "weak", "sleepy", "exhausted",
+        "fatigued", "no energy", "low energy", "drained"
     ]
 
     def contains_any(words: list[str]) -> bool:
         return any(w in t for w in words)
 
-    # Priority order matters
     if contains_any(sad_words):
         return "Sad"
     if contains_any(anxious_words):
