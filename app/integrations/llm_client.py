@@ -1,6 +1,9 @@
 import re
 import httpx
 from app.core.config import settings
+import json
+from pydantic import ValidationError
+from app.daily_reports.schema import DailyElderReport
 
 CHAT_TEMPERATURE = 0.5
 CHAT_MAX_TOKENS = 250
@@ -150,3 +153,42 @@ async def detect_mood(text: str) -> str:
         return "Happy"
 
     return "Neutral"
+
+
+
+async def ask_llm_for_daily_report(prompt: str) -> DailyElderReport:
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You generate structured elder reports. "
+                "Return valid JSON only. No markdown. No code fences"
+            )
+        },
+        {
+            "role": "user",
+            "content": prompt
+        }
+    ]
+
+    raw_text = await _post_llm(
+        messages=messages,
+        temperature=0.2,
+        max_tokens=900
+    )
+
+    raw_text = raw_text.strip()
+
+    if raw_text.startswith("'''"):
+        raw_text=raw_text.strip("'")
+        raw_text=raw_text.replace("json","", 1).strip()
+
+    try:
+        data=json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON from LLM: {raw_text}") from e
+    
+    try:
+        return DailyElderReport.model_validate(data)
+    except ValidationError as e:
+        raise ValueError(f"Daily report schema validation failed: {e}") from e
