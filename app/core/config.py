@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     SEARCH_ENDPOINT: str
     SEARCH_KEY: str
     SEARCH_INDEX: str
-
+    REPORT_SEARCH_INDEX: str
     LLM_BASE_URL: str
     LLM_API_KEY: str
     LLM_MODEL: str
