@@ -5,5 +5,4 @@ _model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 async def embed_query(text: str) -> list[float]:
-    vector = _model.encode(text).tolist()
-    return vector
+    return _model.encode(text).tolist()

@@ -1,22 +1,15 @@
 import re
 import httpx
 from app.core.config import settings
+import json
+from pydantic import ValidationError
+from app.daily_reports.schema import DailyElderReport
 
 CHAT_TEMPERATURE = 0.5
 CHAT_MAX_TOKENS = 250
 
 CHECKIN_TEMPERATURE = 0.4
 CHECKIN_MAX_TOKENS = 220
-
-ALLOWED_MOODS = [
-    "Happy",
-    "Neutral",
-    "Sad",
-    "Anxious",
-    "Angry",
-    "Confused",
-    "Tired"
-]
 
 
 async def _post_llm(messages: list, temperature: float, max_tokens: int) -> str:
@@ -90,52 +83,41 @@ async def ask_llm(
 
 
 async def detect_mood(text: str) -> str:
-    """
-    Simple rule-based mood detection for v1.
-    Deterministic and good enough for current project stage.
-    """
     if not text:
         return "Neutral"
 
     t = text.lower().strip()
-
-    # remove punctuation noise
     t = re.sub(r"[^\w\s]", " ", t)
 
     happy_words = [
-        "happy", "good", "great", "fine", "better", "glad", "calm",
-        "peaceful", "okay", "ok", "nice", "well", "enjoyed"
+        "happy", "great", "better", "glad", "calm",
+        "peaceful", "nice", "well", "enjoyed"
     ]
-
     sad_words = [
-        "sad", "lonely", "down", "depressed", "cry", "upset",
-        "hopeless", "empty", "unhappy", "hurt"
+        "sad", "lonely", "down", "depressed", "cry",
+        "upset", "hopeless", "empty", "unhappy", "hurt"
     ]
-
     anxious_words = [
-        "anxious", "worried", "nervous", "panic", "fear", "afraid",
-        "uneasy", "stressed", "tense"
+        "anxious", "worried", "nervous", "panic", "fear",
+        "afraid", "uneasy", "stressed", "tense"
     ]
-
     angry_words = [
-        "angry", "mad", "annoyed", "frustrated", "irritated",
-        "hate", "furious"
+        "angry", "mad", "annoyed", "frustrated",
+        "irritated", "hate", "furious"
     ]
-
     confused_words = [
-        "confused", "unsure", "don't know", "cannot understand",
-        "forgot", "forget", "lost", "mixed up"
+        "confused", "unsure", "don't know",
+        "cannot understand", "forgot", "forget",
+        "lost", "mixed up"
     ]
-
     tired_words = [
-        "tired", "weak", "sleepy", "exhausted", "fatigued",
-        "no energy", "low energy", "drained"
+        "tired", "weak", "sleepy", "exhausted",
+        "fatigued", "no energy", "low energy", "drained"
     ]
 
     def contains_any(words: list[str]) -> bool:
         return any(w in t for w in words)
 
-    # Priority order matters
     if contains_any(sad_words):
         return "Sad"
     if contains_any(anxious_words):
@@ -150,3 +132,42 @@ async def detect_mood(text: str) -> str:
         return "Happy"
 
     return "Neutral"
+
+
+
+async def ask_llm_for_daily_report(prompt: str) -> DailyElderReport:
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You generate structured elder reports. "
+                "Return valid JSON only. No markdown. No code fences"
+            )
+        },
+        {
+            "role": "user",
+            "content": prompt
+        }
+    ]
+
+    raw_text = await _post_llm(
+        messages=messages,
+        temperature=0.2,
+        max_tokens=900
+    )
+
+    raw_text = raw_text.strip()
+
+    if raw_text.startswith("'''"):
+        raw_text=raw_text.strip("'")
+        raw_text=raw_text.replace("json","", 1).strip()
+
+    try:
+        data=json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON from LLM: {raw_text}") from e
+    
+    try:
+        return DailyElderReport.model_validate(data)
+    except ValidationError as e:
+        raise ValueError(f"Daily report schema validation failed: {e}") from e
