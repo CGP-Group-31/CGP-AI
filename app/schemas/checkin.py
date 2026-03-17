@@ -9,3 +9,6 @@ class RespondCheckInRequest(BaseModel):
     run_id: int
     elder_id: int
     message: str
+class CloseCheckInRequest(BaseModel):
+    run_id: int
+    elder_id: int
