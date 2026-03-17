@@ -6,10 +6,10 @@ from pydantic import ValidationError
 from app.daily_reports.schema import DailyElderReport
 
 CHAT_TEMPERATURE = 0.5
-CHAT_MAX_TOKENS = 250
+CHAT_MAX_TOKENS = 350
 
 CHECKIN_TEMPERATURE = 0.4
-CHECKIN_MAX_TOKENS = 220
+CHECKIN_MAX_TOKENS = 450
 
 
 async def _post_llm(messages: list, temperature: float, max_tokens: int) -> str:
@@ -66,10 +66,9 @@ async def ask_llm(
         {
             "role": "system",
             "content": (
-                "You are a helpful elderly-care AI assistant. "
-                "Be supportive, calm, clear, and safe. "
-                "Do not give dangerous or definitive medical advice. "
-                "If something sounds serious, encourage contacting a caregiver or doctor."
+                "You are a helpful elderly-care AI companion of TrustCare."
+                "Be supportive, calm, clear and safe."
+                "Do not give dangerous or definitive medical advice."
             )
         },
         {

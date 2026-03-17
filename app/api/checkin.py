@@ -1,10 +1,11 @@
 from fastapi import APIRouter, HTTPException
-from app.schemas.checkin import StartCheckInRequest, RespondCheckInRequest
+from app.schemas.checkin import (StartCheckInRequest,RespondCheckInRequest,CloseCheckInRequest)
 from app.services.checkin_service import (
     get_checkin_availability,
     start_checkin,
     get_current_checkin,
     respond_checkin,
+    close_checkin,
 )
 
 router = APIRouter(prefix="/ai/checkin", tags=["AI CheckIn"])
@@ -35,6 +36,17 @@ async def api_respond_checkin(payload: RespondCheckInRequest):
             run_id=payload.run_id,
             elder_id=payload.elder_id,
             message=payload.message
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/close")
+async def api_close_checkin(payload: CloseCheckInRequest):
+    try:
+        return await close_checkin(
+            run_id=payload.run_id,
+            elder_id=payload.elder_id
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

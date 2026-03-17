@@ -78,7 +78,6 @@ async def create_checkin_run(elder_id: int, window_type: str, local_date: str) -
 
     return int(run_id)
 
-
 async def get_current_checkin_for_elder(elder_id: int) -> dict | None:
     sql = text("""
         SELECT TOP 1
@@ -138,3 +137,29 @@ async def complete_run(
             "user_response": user_response,
             "detected_mood_id": detected_mood_id
         })
+
+
+async def close_run(run_id: int, note: str | None = None):
+    sql = text("""
+        UPDATE CheckInRuns
+        SET Status = 'Completed',
+            CompletedAt = SYSUTCDATETIME(),
+            Notes = :note
+        WHERE RunID = :run_id
+    """)
+    with engine.begin() as conn:
+        conn.execute(sql, {
+            "run_id": run_id,
+            "note": note
+        })
+
+
+async def close_thread_by_run_id(run_id: int):
+    sql = text("""
+        UPDATE ChatThreads
+        SET ClosedAt = SYSUTCDATETIME()
+        WHERE RelatedRunID = :run_id
+          AND ClosedAt IS NULL
+    """)
+    with engine.begin() as conn:
+        conn.execute(sql, {"run_id": run_id})

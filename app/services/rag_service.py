@@ -14,7 +14,7 @@ from app.integrations.llm_client import (
 )
 
 from app.integrations.crud_client import (
-    get_elder_profile, 
+    get_elder_profile,
     get_medical_profile,
     get_upcoming_appointments,
     get_latest_additional_info,
@@ -29,6 +29,8 @@ from app.repositories.chat_repository import (
 )
 
 from app.repositories.mood_repository import get_mood_id_by_name
+
+from app.api.routes.user import get_user_basic_internal
 
 
 def _format_chat_memory(memory: list[dict]) -> str:
@@ -65,21 +67,34 @@ def _format_report_memory(reports: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _format_user_basic_as_structured(user_basic: dict | None) -> str:
+    if not user_basic:
+        return "Basic user info not available."
+
+    return f"""Basic user information:
+Name: {user_basic.get("name")}
+Age: {user_basic.get("age")}
+Gender: {user_basic.get("gender")}
+"""
+
+
 def _format_structured_context(
     intent: str,
+    user_basic=None,
     elder_profile=None,
     medical_profile=None,
     appointments=None,
     additional_info=None,
     meals=None,
 ) -> str:
-    """
-    Keep this very focused.
-    Only one primary intent should usually contribute structured data.
-    """
+    parts = []
+
+    # Always include basic user info if available
+    parts.append(_format_user_basic_as_structured(user_basic))
+
     if intent == "profile" and elder_profile:
         caregiver = elder_profile.get("caregiver") or {}
-        return f"""Elder profile:
+        parts.append(f"""User profile:
 Name: {elder_profile.get("ElderFullName")}
 Email: {elder_profile.get("Email")}
 Phone: {elder_profile.get("Phone")}
@@ -89,27 +104,27 @@ Gender: {elder_profile.get("Gender")}
 Caregiver name: {caregiver.get("CaregiverFullName")}
 Relationship type: {caregiver.get("RelationshipType")}
 Primary caregiver: {caregiver.get("IsPrimary")}
-"""
+""")
 
-    if intent == "medical" and medical_profile:
-        return f"""Medical profile:
+    elif intent == "medical" and medical_profile:
+        parts.append(f"""Medical profile:
 Blood type: {medical_profile.get("BloodType")}
 Allergies: {medical_profile.get("Allergies")}
 Chronic conditions: {medical_profile.get("ChronicConditions")}
 Emergency notes: {medical_profile.get("EmergencyNotes")}
 Past surgeries: {medical_profile.get("PastSurgeries")}
-"""
+""")
 
-    if intent == "appointments" and appointments:
+    elif intent == "appointments" and appointments:
         lines = []
         for a in appointments:
             lines.append(
                 f'{a.get("AppointmentDate")} {a.get("AppointmentTime")} - '
                 f'{a.get("Title")} at {a.get("Location")} with {a.get("DoctorName")}'
             )
-        return "Upcoming appointments:\n" + "\n".join(lines)
+        parts.append("Upcoming appointments:\n" + "\n".join(lines))
 
-    if intent == "additional_info" and additional_info:
+    elif intent == "additional_info" and additional_info:
         lines = []
         for item in additional_info:
             lines.append(
@@ -120,9 +135,9 @@ Past surgeries: {medical_profile.get("PastSurgeries")}
                 f'Health goals: {item.get("health_goals")}; '
                 f'Observations: {item.get("special_notes_observations")}'
             )
-        return "Latest caregiver notes:\n" + "\n".join(lines)
+        parts.append("Latest caregiver notes:\n" + "\n".join(lines))
 
-    if intent == "meals" and meals:
+    elif intent == "meals" and meals:
         lines = []
         for item in meals:
             lines.append(
@@ -131,16 +146,14 @@ Past surgeries: {medical_profile.get("PastSurgeries")}
                 f'Diet: {item.get("Diet")}, '
                 f'ScheduledFor: {item.get("ScheduledFor")}'
             )
-        return "Today's meals:\n" + "\n".join(lines)
+        parts.append("Today's meals:\n" + "\n".join(lines))
 
-    return "No structured data retrieved."
+    return "\n\n".join(parts)
 
 
 async def generate_answer(elder_id: int, question: str):
-    # 1) Get or create normal chat thread
     thread_id = await get_or_create_open_thread(elder_id)
 
-    # 2) Detect mood for elder message
     try:
         detected_mood_name = await detect_mood(question)
     except Exception:
@@ -148,7 +161,6 @@ async def generate_answer(elder_id: int, question: str):
 
     detected_mood_id = await get_mood_id_by_name(detected_mood_name)
 
-    # 3) Save elder message first
     elder_message_id = await save_chat_message(
         thread_id=thread_id,
         elder_id=elder_id,
@@ -157,10 +169,11 @@ async def generate_answer(elder_id: int, question: str):
         detected_mood_id=detected_mood_id,
     )
 
-    # 4) Detect one primary intent only
+    # Basic info from same AI DB
+    user_basic = get_user_basic_internal(elder_id)
+
     intent = detect_primary_intent(question)
 
-    # 5) Fetch only the needed structured truth
     elder_profile = None
     medical_profile = None
     appointments = []
@@ -182,9 +195,9 @@ async def generate_answer(elder_id: int, question: str):
     elif intent == "meals":
         meals = await get_today_meals(elder_id)
 
-    # 6) Build structured context
     structured_context = _format_structured_context(
         intent=intent,
+        user_basic=user_basic,
         elder_profile=elder_profile,
         medical_profile=medical_profile,
         appointments=appointments,
@@ -192,29 +205,24 @@ async def generate_answer(elder_id: int, question: str):
         meals=meals,
     )
 
-    # 7) Retrieve memory
-    # Keep this small and stable for now
     chat_memory = await search_memory(elder_id, question, top_k=3)
     report_memory = await search_report_memory(elder_id, question, top_k=1)
 
     chat_memory_text = _format_chat_memory(chat_memory)
     report_memory_text = _format_report_memory(report_memory)
 
-    # 8) Build final prompt
     prompt = f"""
-You are an elderly-care AI assistant.
-
-Answer the elder's question using:
-1. structured data first, if available
-2. past chat memory only if relevant
-3. care report memory only if helpful
+You are a helpful elderly-care AI companion of TrustCare system that was deveoped by Group 31. 
+The following structured data about the current user is reliable.
+If the user's question asks about age, gender, name, profile or similar details,
+answer directly from the structured data below.
 
 Rules:
 - Be supportive and easy to understand.
 - Keep the answer concise and natural.
-- If structured data already answers the question, use it directly.
+- Prefer structured data over memory.
 - Do not invent facts.
-- Do not mention retrieval, APIs, databases, or system internals.
+- Do not mention databases, APIs, or retrieval systems.
 - If data is missing, say so simply.
 
 Primary intent:
@@ -233,14 +241,12 @@ Question:
 {question}
 """
 
-    # 9) Ask LLM
     answer = await ask_llm(
         prompt=prompt,
         temperature=CHAT_TEMPERATURE,
         max_tokens=CHAT_MAX_TOKENS,
     )
 
-    # 10) Save assistant message
     assistant_message_id = await save_chat_message(
         thread_id=thread_id,
         elder_id=elder_id,
@@ -248,7 +254,6 @@ Question:
         content=answer,
     )
 
-    # 11) Index elder message into chat memory index
     elder_vector = await embed_query(question)
     elder_doc = build_chat_index_doc(
         message_id=elder_message_id,
@@ -261,7 +266,6 @@ Question:
     )
     await index_message(elder_doc)
 
-    # 12) Index assistant message into chat memory index
     assistant_vector = await embed_query(answer)
     assistant_doc = build_chat_index_doc(
         message_id=assistant_message_id,
@@ -274,7 +278,6 @@ Question:
     )
     await index_message(assistant_doc)
 
-    # 13) Return debug-friendly response for now
     return {
         "elder_id": elder_id,
         "thread_id": thread_id,
@@ -282,6 +285,7 @@ Question:
         "intent": intent,
         "detected_mood": detected_mood_name,
         "answer": answer,
+        "user_basic_used": user_basic,
         "structured_context_used": structured_context,
         "chat_memory_count": len(chat_memory),
         "report_memory_count": len(report_memory),
