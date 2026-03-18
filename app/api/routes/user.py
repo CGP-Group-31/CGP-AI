@@ -1,3 +1,4 @@
+# app/api/routes/user.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -27,9 +28,7 @@ def calculate_age(dob):
     return age
 
 
-@router.get("/{user_id}/basic", response_model=UserBasicResponse)
-def get_user_basic(user_id: int):
-
+def get_user_basic_internal(user_id: int) -> dict | None:
     query = text("""SELECT FullName, DateOfBirth, Gender FROM Users
         WHERE UserID = :user_id AND RoleID = 5""")
 
@@ -37,12 +36,25 @@ def get_user_basic(user_id: int):
         row = conn.execute(query, {"user_id": user_id}).mappings().first()
 
     if not row:
-        raise HTTPException(status_code=404, detail="User not found")
+        return None
 
     age = calculate_age(row["DateOfBirth"])
 
+    return {
+        "name": row["FullName"],
+        "age": age,
+        "gender": row["Gender"]
+    }
+
+@router.get("/{user_id}/basic", response_model=UserBasicResponse)
+def get_user_basic(user_id: int):
+    data = get_user_basic_internal(user_id)
+
+    if not data:
+        raise HTTPException(status_code=404, detail="User not found")
+
     return UserBasicResponse(
-        name=row["FullName"],
-        age=age,
-        gender=row["Gender"]
+        name=data["name"],
+        age=data["age"],
+        gender=data["gender"]
     )
