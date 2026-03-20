@@ -11,6 +11,8 @@ CHAT_MAX_TOKENS = 350
 CHECKIN_TEMPERATURE = 0.4
 CHECKIN_MAX_TOKENS = 450
 
+DAILY_REPORT_TEMPERATURE = 0.2
+DAILY_REPORT_MAX_TOKENS = 1200
 
 async def _post_llm(messages: list, temperature: float, max_tokens: int) -> str:
     headers = {
@@ -140,32 +142,26 @@ async def ask_llm_for_daily_report(prompt: str) -> DailyElderReport:
             "role": "system",
             "content": (
                 "You generate structured elder reports. "
-                "Return valid JSON only. No markdown. No code fences"
-            )
+                "Return valid JSON only. "
+                "No markdown. "
+                "No code fences. "
+                "Do not include explanations outside the JSON object."
+            ),
         },
         {
             "role": "user",
-            "content": prompt
-        }
+            "content": prompt,
+        },
     ]
 
     raw_text = await _post_llm(
         messages=messages,
-        temperature=0.2,
-        max_tokens=900
+        temperature=DAILY_REPORT_TEMPERATURE,
+        max_tokens=DAILY_REPORT_MAX_TOKENS,
     )
 
-    raw_text = raw_text.strip()
+    data = _extract_json_object(raw_text)
 
-    if raw_text.startswith("'''"):
-        raw_text=raw_text.strip("'")
-        raw_text=raw_text.replace("json","", 1).strip()
-
-    try:
-        data=json.loads(raw_text)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON from LLM: {raw_text}") from e
-    
     try:
         return DailyElderReport.model_validate(data)
     except ValidationError as e:
