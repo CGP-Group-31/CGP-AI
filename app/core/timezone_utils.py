@@ -39,7 +39,7 @@ def get_checkin_window(local_dt: datetime) -> str | None:
     if "08:00" <= hhmm <= "11:59":
         return "Morning"
 
-    if "17:00" <= hhmm <= "23:59":
+    if "16:00" <= hhmm <= "23:59":
         return "Night"
 
     return None
