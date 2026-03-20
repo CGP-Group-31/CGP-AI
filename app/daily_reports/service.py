@@ -1,18 +1,40 @@
 from app.daily_reports.client import get_elder_form, get_meal_adherence, get_med_adherence
 from app.daily_reports.prompt import build_daily_report_prompt
-from app.daily_reports.repository import report_exist_for_day, get_checkin_runs_for_day, save_daily_report, get_ai_chat_for_day, queue_semantic_index
-
+from app.daily_reports.repository import report_exist_for_day, get_checkin_runs_for_day, save_daily_report
 from app.integrations.llm_client import ask_llm_for_daily_report
-
+from app.vector_store.report_indexer import index_daily_report
 
 def _summarize_checkins(checkins: list[dict]) -> dict:
-    completed = sum(1 for x in checkins if x.get("Status")=="Completed")
-    missed = sum(1 for x in checkins if x.get("Status")=="Missed")
-    failed = sum(1 for x in checkins if x.get("Status")=="Failed")
-    waiting_user = sum(1 for x in checkins if x.get("Status")=="WaitingUser")
+    completed = sum(1 for x in checkins if x.get("Status") == "Completed")
+    missed = sum(1 for x in checkins if x.get("Status") == "Missed")
+    failed = sum(1 for x in checkins if x.get("Status") == "Failed")
+    waiting_user = sum(1 for x in checkins if x.get("Status") == "WaitingUser")
 
-    moods = [x.get("DetectedMood") for x in checkins if x.get("DetectedMood")]
-    responses = [x.get("UserResponse") for x in checkins if x.get("UserResponse")]
+    responses = []
+    notes = []
+    moods = []
+    windows_present = []
+    closed_by_elder_count = 0
+
+    for x in checkins:
+        window = x.get("WindowType")
+        if window:
+            windows_present.append(window)
+
+        response = x.get("UserResponse")
+        if response and str(response).strip():
+            responses.append(str(response).strip())
+
+        mood = x.get("DetectedMood")
+        if mood and str(mood).strip():
+            moods.append(str(mood).strip())
+
+        note = x.get("Notes")
+        if note and str(note).strip():
+            clean_note = str(note).strip()
+            notes.append(clean_note)
+            if clean_note.lower() == "closed by elder":
+                closed_by_elder_count += 1
 
     return {
         "total_runs": len(checkins),
@@ -20,11 +42,21 @@ def _summarize_checkins(checkins: list[dict]) -> dict:
         "missed": missed,
         "failed": failed,
         "waiting_user": waiting_user,
-        "detected_moods": moods,
-        "key_responses": responses[:5]
+        "windows_present": sorted(list(set(windows_present))),
+        "response_count": len(responses),
+        "mood_count": len(moods),
+        "closed_by_elder_count": closed_by_elder_count,
+        "key_responses": responses[:5],
+        "notes": notes[:10],
+        "moods": moods[:10],
+        "data_quality": {
+            "has_meaningful_response": len(responses) > 0,
+            "has_mood_signal": len(moods) > 0,
+            "limited_detail": len(responses) == 0 and len(moods) == 0,
+        },
     }
 
-
+'''
 def _summarize_elder_messages(messages: list[dict]) -> list[dict]:
     result = []
     for m in messages[:10]:
@@ -36,7 +68,7 @@ def _summarize_elder_messages(messages: list[dict]) -> list[dict]:
             "safety_flag": m.get("SafetyFlag")
         })
     return result
-
+'''
 
 def _summarize_medication(items: list[dict]) -> dict:
     total = len(items)
@@ -49,7 +81,7 @@ def _summarize_medication(items: list[dict]) -> dict:
        "taken": taken,
        "missed": missed,
        "skipped": skipped,
-       "items": items
+       "items": items[:20]
    }
 
 
@@ -70,46 +102,20 @@ def _summarize_meals(items: list[dict]) -> dict:
 
 
 def build_fallback_text(report: dict) -> str:
-    lines = [
-        "Elder Day Overview:",
-        f"- Mood: {report['elder_day_overview']['mood']}",
-        f"- Sleep: {report['elder_day_overview']['sleep']}",
-        f"- Water Intake: {report['elder_day_overview']['water_intake']}",
-        f"- Appetite: {report['elder_day_overview']['appetite']}", 
-        f"- Energy: {report['elder_day_overview']['energy']}", 
-        f"- Overall Day: {report['elder_day_overview']['overall_day']}", 
-        f"- Movement: {report['elder_day_overview']['movement']}",
-        f"- Loneliness: {report['elder_day_overview']['loneliness']}",
-        f"- Social Interaction: {report['elder_day_overview']['social_interaction']}",   
-        f"- Stress: {report['elder_day_overview']['stress']}", 
-        f"- Pain Report: {', '.join(report['pain_report']['pain_areas'])if report['pain_report']['pain_areas']  else 'No pain reported'}",
-         f"Activities: {', '.join(report['activities']) if report['activities'] else 'No activities recorded'}",
-        f"- AI Check-In Insights: {report.get('ai_chekin_insights','No AI check-in insights available')}", 
-        f"- Medication Adherence: {report['medication_adherence']['headline']}",
-    ]
-
-    for d in report["medication_adherence"]["details"]:
-        lines.append(f"- {d}")
-
-    lines.append(
-        "Meal Adherence: "
-        f"Breakfast={report['meal_adherence']['breakfast']}, "
-        f"Lunch={report['meal_adherence']['lunch']}, "
-        f"Dinner={report['meal_adherence']['dinner']}"
-    )
-
-    if report["concerns"]:
-        lines.append("Concerns:")
-        for c in report["concerns"]:
-            lines.append(f"- {c}")
-    else:
-        lines.append("Concerns: None significant noted.")
-    
-    lines.append(f"Caregiver Recommendations: {report['caregiver_recommendation']}")
-    return "\n".join(lines)
+    return "\n\n".join([
+        f"Overall Daily Summary:\n{report.get('overall_summary', '')}",
+        f"Mood and Emotional Observations:\n{report.get('mood_observations', '')}",
+        f"Check-In Participation and Engagement:\n{report.get('checkin_engagement', '')}",
+        f"Medication Adherence Insights:\n{report.get('medication_insights', '')}",
+        f"Meal and Nutrition Insights:\n{report.get('meal_insights', '')}",
+        f"Behavioral or Cognitive Observations:\n{report.get('behavioral_observations', '')}",
+        f"Risk Flags or Concerns:\n{report.get('risk_flags', '')}",
+        f"Caregiver Follow-Up Suggestions:\n{report.get('caregiver_follow_up', '')}",
+    ]).strip()
 
 
-def build_source_refs(checkin: list[dict], messages: list[dict]) -> list[dict]:
+
+def build_source_refs(checkin: list[dict]) -> list[dict]:
     ref = []
 
     for c in checkin:
@@ -117,13 +123,6 @@ def build_source_refs(checkin: list[dict], messages: list[dict]) -> list[dict]:
             ref.append({
                 "source_type": "checkin_run",
                 "source_id": int(c["RunID"])
-            })
-
-    for m in messages:
-        if m.get("MessageID") is not None:
-            ref.append({
-                "source_type": "chat_message",
-                "source_id": int(m["MessageID"])
             })
 
     seen = set()
@@ -150,7 +149,6 @@ async def generate_daily_report_for_elder(elder_id: int, report_date: str) -> di
 
         }
     checkins = await get_checkin_runs_for_day(elder_id, report_date)
-    elder_messages = await get_ai_chat_for_day(elder_id, report_date)
     elder_form = await get_elder_form(elder_id, report_date)
     medication = await get_med_adherence(elder_id, report_date)
     meals = await get_meal_adherence(elder_id, report_date)
@@ -160,17 +158,16 @@ async def generate_daily_report_for_elder(elder_id: int, report_date: str) -> di
         "report_date": report_date,
         "elder_form": elder_form,
         "checkins": _summarize_checkins(checkins),
-        "elder_messages": _summarize_elder_messages(elder_messages),
         "medication": _summarize_medication(medication),
         "meals": _summarize_meals(meals)
     }
 
     prompt = build_daily_report_prompt(context)
     report_obj = await ask_llm_for_daily_report(prompt)
-
     report_dict = report_obj.model_dump()
+
     fallback_text = build_fallback_text(report_dict)
-    source_refs = build_source_refs(checkins, elder_messages)
+    source_refs = build_source_refs(checkins)
 
     report_id = await save_daily_report(
         elder_id=elder_id,
@@ -180,11 +177,13 @@ async def generate_daily_report_for_elder(elder_id: int, report_date: str) -> di
         source_refs=source_refs
     )
 
-    await queue_semantic_index(
-        source_type="care_report",
-        source_id=report_id,
-        elder_id=elder_id
-    )
+    await index_daily_report(
+    report_id=report_id,
+    elder_id=elder_id,
+    period_start=report_date,
+    period_end=report_date,
+    content=fallback_text
+)
 
     return {
         "status": "success",

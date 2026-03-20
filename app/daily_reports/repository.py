@@ -18,24 +18,36 @@ async def report_exist_for_day(elder_id: int, report_date:str)->bool:
 
 
 
-async def get_checkin_runs_for_day(elder_id: int, report_date:str)->list[dict]:
-    sql = text(
-        '''SELECT 
-            c.RunID, c.Status, c.PlannedAt, c.TriggeredAt, c.CompletedAt, c.UserResponse, m.MoodName AS DetectedMood, c.Notes
-            FROM CheckInRuns c LEFT JOIN MoodTypes m on c.DetectedMoodID = m.MoodID
-            WHERE c.ElderID= :elder_id AND CAST(c.PlannedAt AS Date)=:report_date ORDER BY c.PlannedAt ASC'''
-    )
+async def get_checkin_runs_for_day(elder_id: int, report_date: str) -> list[dict]:
+    sql = text("""
+        SELECT
+            c.RunID,
+            c.Status,
+            c.WindowType,
+            c.LocalDate,
+            c.PlannedAt,
+            c.TriggeredAt,
+            c.CompletedAt,
+            c.UserResponse,
+            m.MoodName AS DetectedMood,
+            c.Notes
+        FROM CheckInRuns c
+        LEFT JOIN MoodTypes m
+            ON c.DetectedMoodID = m.MoodID
+        WHERE c.ElderID = :elder_id
+          AND c.LocalDate = :report_date
+        ORDER BY c.PlannedAt ASC
+    """)
 
     with engine.begin() as conn:
-        row = conn.execute(sql, {
+        rows = conn.execute(sql, {
             "elder_id": elder_id,
-            "report_date": report_date
+            "report_date": report_date,
         }).mappings().all()
 
-    return [dict(r) for r in row]
+    return [dict(r) for r in rows]
 
-
-
+'''
 async def get_ai_chat_for_day(elder_id: int, report_date: str):
     sql = text("""
         SELECT
@@ -61,7 +73,7 @@ async def get_ai_chat_for_day(elder_id: int, report_date: str):
 
     return [dict(r) for r in rows]
 
-
+'''
 
 
 
@@ -98,26 +110,7 @@ VALUES(:elder_id,'daily',:period_start,:period_end,:report_text,:report_json)
     return int(report_id)
 
 
-async def queue_semantic_index(source_type: str, source_id: int, elder_id: int):
-    sql = text("""
-        INSERT INTO SemanticIndexQueue (
-            SourceType,
-            SourceID,
-            ElderID
-        )
-        VALUES (
-            :source_type,
-            :source_id,
-            :elder_id
-        )
-    """)
 
-    with engine.begin() as conn:
-        conn.execute(sql, {
-            "source_type": source_type,
-            "source_id": source_id,
-            "elder_id": elder_id
-        })
 
 
 
