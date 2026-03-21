@@ -206,14 +206,14 @@ async def generate_answer(elder_id: int, question: str):
     )
 
     chat_memory = await search_memory(elder_id, question, top_k=3)
-    report_memory = await search_report_memory(elder_id, question, top_k=1)
+    report_memory = await search_report_memory(elder_id, question, top_k=2)
 
     chat_memory_text = _format_chat_memory(chat_memory)
     report_memory_text = _format_report_memory(report_memory)
 
     prompt = f"""
 You are a helpful elderly-care AI companion of TrustCare system that was deveoped by Group 31. 
-The following structured data about the current user is reliable.
+The following structured data about the current user is reliable. 
 If the user's question asks about age, gender, name, profile or similar details,
 answer directly from the structured data below.
 

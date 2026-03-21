@@ -7,7 +7,7 @@ router = APIRouter(prefix="/debug", tags=["debug"])
 
 @router.post("/index-test")
 async def index_test():
-    content = "today is my bithday march 10. now im 40 years old" #this dummy data inser for azure ai search 
+    content = "today is my bithday march 10. now im 40 years old" #this dummy data insert for azure ai search 
     vector = await embed_query(content)
 
     doc = {

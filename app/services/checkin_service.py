@@ -97,7 +97,7 @@ Date of birth: {elder_profile.get("DateOfBirth")}
 Address: {elder_profile.get("Address")}
 Gender: {elder_profile.get("Gender")}
 Caregiver name: {caregiver.get("CaregiverFullName")}
-Relationship type: {caregiver.get("RelationshipType")}
+Relationship for caregiver {caregiver.get("RelationshipType")}
 Primary caregiver: {caregiver.get("IsPrimary")}
 """)
 
@@ -114,7 +114,7 @@ async def _load_full_checkin_context(elder_id: int, query_text: str) -> dict:
     elder_profile = await get_elder_profile(elder_id)
 
     chat_memory = await search_memory(elder_id, query_text, top_k=3)
-    report_memory = await search_report_memory(elder_id, query_text, top_k=2)
+    report_memory = await search_report_memory(elder_id, query_text, top_k=4)
 
     structured_context = _format_structured_context(
         user_basic=user_basic,
