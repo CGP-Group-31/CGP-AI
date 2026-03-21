@@ -4,6 +4,7 @@ from app.core.config import settings
 import json
 from pydantic import ValidationError
 from app.daily_reports.schema import DailyElderReport
+from app.weekly_report.schema import WeeklyElderReport
 
 CHAT_TEMPERATURE = 0.5
 CHAT_MAX_TOKENS = 350
@@ -13,6 +14,9 @@ CHECKIN_MAX_TOKENS = 450
 
 DAILY_REPORT_TEMPERATURE = 0.2
 DAILY_REPORT_MAX_TOKENS = 1200
+
+WEEKLY_REPORT_TEMPERATURE = 0.2
+WEEKLY_REPORT_MAX_TOKENS = 1500
 
 async def _post_llm(messages: list, temperature: float, max_tokens: int) -> str:
     headers = {
@@ -136,6 +140,38 @@ async def detect_mood(text: str) -> str:
 
 
 
+def _extract_json_object(text: str) -> dict:
+    """
+    Extract the first valid JSON object from LLM output.
+    """
+
+    if not text:
+        raise ValueError("LLM returned empty response")
+
+    text = text.strip()
+
+    # remove markdown fences
+    text = re.sub(r"^```json", "", text, flags=re.IGNORECASE).strip()
+    text = re.sub(r"^```", "", text).strip()
+    text = re.sub(r"```$", "", text).strip()
+
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start == -1 or end == -1:
+        raise ValueError(f"No JSON object found in LLM output: {text}")
+
+    json_str = text[start:end + 1]
+
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON returned by LLM: {e}\n{text}")
+    
+
+
+    
+
 async def ask_llm_for_daily_report(prompt: str) -> DailyElderReport:
     messages = [
         {
@@ -166,3 +202,41 @@ async def ask_llm_for_daily_report(prompt: str) -> DailyElderReport:
         return DailyElderReport.model_validate(data)
     except ValidationError as e:
         raise ValueError(f"Daily report schema validation failed: {e}") from e
+    
+
+
+
+async def ask_llm_for_weekly_report(prompt: str) -> WeeklyElderReport:
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You generate structured weekly elder care reports. "
+                "Return valid JSON only. "
+                "No markdown. "
+                "No code fences. "
+                "Do not include explanations outside the JSON object."
+            ),
+        },
+        {
+            "role": "user",
+            "content": prompt,
+        },
+    ]
+
+    raw_text = await _post_llm(
+        messages=messages,
+        temperature=WEEKLY_REPORT_TEMPERATURE,
+        max_tokens=WEEKLY_REPORT_MAX_TOKENS,
+    )
+
+    data = _extract_json_object(raw_text)
+
+    try:
+        return WeeklyElderReport.model_validate(data)
+
+    except ValidationError as e:
+        raise ValueError(
+            f"Weekly report schema validation failed: {e}"
+        ) from e

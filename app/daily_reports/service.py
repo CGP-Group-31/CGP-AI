@@ -2,7 +2,7 @@ from app.daily_reports.client import get_elder_form, get_meal_adherence, get_med
 from app.daily_reports.prompt import build_daily_report_prompt
 from app.daily_reports.repository import report_exist_for_day, get_checkin_runs_for_day, save_daily_report
 from app.integrations.llm_client import ask_llm_for_daily_report
-from app.vector_store.report_indexer import index_daily_report
+from app.vector_store.report_indexer import index_daily_weekly_report
 
 def _summarize_checkins(checkins: list[dict]) -> dict:
     completed = sum(1 for x in checkins if x.get("Status") == "Completed")
@@ -177,12 +177,14 @@ async def generate_daily_report_for_elder(elder_id: int, report_date: str) -> di
         source_refs=source_refs
     )
 
-    await index_daily_report(
+    await index_daily_weekly_report(
     report_id=report_id,
     elder_id=elder_id,
+    report_type="daily",
     period_start=report_date,
     period_end=report_date,
     content=fallback_text
+    
 )
 
     return {
