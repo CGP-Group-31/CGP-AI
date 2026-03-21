@@ -4,13 +4,13 @@ from app.vector_store.embedder import embed_query
 from app.vector_store.report_search import report_search_client
 
 
-async def index_daily_report(
+async def index_daily_weekly_report(
     report_id: int,
     elder_id: int,
     period_start: str,
     period_end: str,
     content: str,
-    report_type: str = "daily"
+    report_type: str
 ):
     vector = await embed_query(content)
 
