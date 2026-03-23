@@ -3,10 +3,10 @@ from pydantic import BaseModel
 
 
 class WeeklyElderReport(BaseModel):
-    report_type: Literal["weekly"] = "weekly"
+    report_type: Literal["weekly"] 
     week_start: str
     week_end: str
-
+    
     mood_observations: str
     engagement_patterns: str
     medication_adherence: str

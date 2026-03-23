@@ -28,15 +28,20 @@ async def get_checkin_runs_for_day(elder_id: int, report_date: str) -> list[dict
             c.PlannedAt,
             c.TriggeredAt,
             c.CompletedAt,
-            c.UserResponse,
-            m.MoodName AS DetectedMood,
+            m.Content AS UserResponse,
+            mt.MoodName AS DetectedMood,
             c.Notes
         FROM CheckInRuns c
-        LEFT JOIN MoodTypes m
-            ON c.DetectedMoodID = m.MoodID
+        LEFT JOIN ChatThreads ct
+            ON ct.RelatedRunID = c.RunID
+        LEFT JOIN ChatMessages m
+            ON m.ThreadID = ct.ThreadID
+            AND m.Role = 'elder'
+        LEFT JOIN MoodTypes mt
+            ON m.DetectedMoodID = mt.MoodID
         WHERE c.ElderID = :elder_id
           AND c.LocalDate = :report_date
-        ORDER BY c.PlannedAt ASC
+        ORDER BY c.PlannedAt ASC, m.CreatedAt ASC
     """)
 
     with engine.begin() as conn:
@@ -46,34 +51,6 @@ async def get_checkin_runs_for_day(elder_id: int, report_date: str) -> list[dict
         }).mappings().all()
 
     return [dict(r) for r in rows]
-
-'''
-async def get_ai_chat_for_day(elder_id: int, report_date: str):
-    sql = text("""
-        SELECT
-            m.MessageID,
-            m.ThreadID,
-            m.Content,
-            m.CreatedAt,
-            mt.MoodName AS DetectedMood,
-            m.SafetyFlag
-        FROM ChatMessages m
-        LEFT JOIN MoodTypes mt ON m.DetectedMoodID = mt.MoodID
-        WHERE m.ElderID = :elder_id
-          AND m.Role = 'elder'
-          AND CAST(m.CreatedAt AS DATE) = :report_date
-        ORDER BY m.CreatedAt ASC
-    """)
-
-    with engine.begin() as conn:
-        rows = conn.execute(sql, {
-            "elder_id": elder_id,
-            "report_date": report_date
-        }).mappings().all()
-
-    return [dict(r) for r in rows]
-
-'''
 
 
 
