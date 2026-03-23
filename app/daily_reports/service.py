@@ -5,10 +5,12 @@ from app.integrations.llm_client import ask_llm_for_daily_report
 from app.vector_store.report_indexer import index_daily_weekly_report
 
 def _summarize_checkins(checkins: list[dict]) -> dict:
-    completed = sum(1 for x in checkins if x.get("Status") == "Completed")
-    missed = sum(1 for x in checkins if x.get("Status") == "Missed")
-    failed = sum(1 for x in checkins if x.get("Status") == "Failed")
-    waiting_user = sum(1 for x in checkins if x.get("Status") == "WaitingUser")
+    run_ids = set(x["RunID"] for x in checkins if x.get("RunID"))
+
+    completed = len({x["RunID"] for x in checkins if x.get("Status") == "Completed"})
+    missed = len({x["RunID"] for x in checkins if x.get("Status") == "Missed"})
+    failed = len({x["RunID"] for x in checkins if x.get("Status") == "Failed"})
+    waiting_user = len({x["RunID"] for x in checkins if x.get("Status") == "WaitingUser"})
 
     responses = []
     notes = []
@@ -37,7 +39,7 @@ def _summarize_checkins(checkins: list[dict]) -> dict:
                 closed_by_elder_count += 1
 
     return {
-        "total_runs": len(checkins),
+        "total_runs": len(run_ids),
         "completed": completed,
         "missed": missed,
         "failed": failed,
@@ -56,19 +58,6 @@ def _summarize_checkins(checkins: list[dict]) -> dict:
         },
     }
 
-'''
-def _summarize_elder_messages(messages: list[dict]) -> list[dict]:
-    result = []
-    for m in messages[:10]:
-        result.append({
-            "message_id": m.get("MessageID"),
-            "content": m.get("Content"),
-            "created_at": str(m.get("CreatedAt")),
-            "detected_mood": m.get("DetectedMood"),
-            "safety_flag": m.get("SafetyFlag")
-        })
-    return result
-'''
 
 def _summarize_medication(items: list[dict]) -> dict:
     total = len(items)
@@ -119,22 +108,13 @@ def build_source_refs(checkin: list[dict]) -> list[dict]:
     ref = []
 
     for c in checkin:
-        if c.get("RunID") is not None:
+        if c.get("RunID"):
             ref.append({
                 "source_type": "checkin_run",
                 "source_id": int(c["RunID"])
             })
 
-    seen = set()
-    unique = []
-    for r in ref:
-        key = (r["source_type"], r["source_id"])
-        if key not in seen:
-            seen.add(key)
-            unique.append(r)
-
-    return unique
-
+    return list({(r["source_type"], r["source_id"]): r for r in ref}.values())
 
 
 
