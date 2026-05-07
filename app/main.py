@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.api.chat import router as chat_router
 
-app = FastAPI(title="Elder AI System")
+app = FastAPI(title="TrustCare AI System")
 
 
 

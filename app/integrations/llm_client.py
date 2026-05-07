@@ -141,9 +141,6 @@ async def detect_mood(text: str) -> str:
 
 
 def _extract_json_object(text: str) -> dict:
-    """
-    Extract the first valid JSON object from LLM output.
-    """
 
     if not text:
         raise ValueError("LLM returned empty response")
@@ -159,14 +156,14 @@ def _extract_json_object(text: str) -> dict:
     end = text.rfind("}")
 
     if start == -1 or end == -1:
-        raise ValueError(f"No JSON object found in LLM output: {text}")
+        raise ValueError("No JSON object found in LLM output")
 
     json_str = text[start:end + 1]
 
     try:
         return json.loads(json_str)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON returned by LLM: {e}\n{text}")
+        raise ValueError(f"Invalid JSON returned by LLM: {e}")
     
 
 
