@@ -10,18 +10,20 @@ def detect_primary_intent(question: str) -> str:
 
     if any(x in q for x in [
         "caregiver", "who looks after me", "my profile", "my details",
-        "my name", "my phone", "my address", "my age", "my gender",
-        "age", "gender", "date of birth", "me", "myself", "my details"
+         "my phone", "my address", "my age", "my gender",
+        "age", "gender", "date of birth", "myself", "my details"
     ]):
         return "profile"
 
     if any(x in q for x in [
-        "appointment", "doctor visit", "hospital", "next appointment", "upcoming"
+        "appointment", "doctor visit", "hospital", "next appointments", "upcoming", "upcoming appointments", "doctor appointments",
+        "appointments","my doctor appointments", "my appointments", "my upcoming doctor appointments"
     ]):
         return "appointments"
 
     if any(x in q for x in [
-        "meal", "food", "eat", "eaten", "breakfast", "lunch", "dinner", "diet"
+         "meal", "food", "eat", "eaten", "breakfast", "lunch", "dinner", "diet", "today meal", "meals", "my meals", "today meals",
+         "today meal", "my today meals", "what did i eat today", "my food today", "today's food", "today's meals"
     ]):
         return "meals"
 
