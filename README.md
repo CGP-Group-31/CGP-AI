@@ -23,7 +23,7 @@ AI based check-in, messaging and reporting system for TrustCare Care Recipient A
 - NumPy
 
 
----
+
 #Download the SQL Server ODBC Driver 17  (https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server?view=sql-server-ver17)
 
 
@@ -56,3 +56,23 @@ pip install -r requirements.txt
 
 ## Open with SWAGGER
 http://127.0.0.1:8001/docs
+
+## env
+```
+DATABASE_URL=mssql+pyodbc://CGP_project_login:xxxxxx@xxxxxxx:1433/CGP_DB?driver=ODBC+Driver+17+for+SQL+Server
+## AZURE AI SEARCH
+SEARCH_ENDPOINT=https://xxxx.search.windows.net
+SEARCH_KEY=
+SEARCH_INDEX=
+REPORT_SEARCH_INDEX=
+
+LLM_BASE_URL=
+LLM_API_KEY=
+LLM_MODEL=openai-gpt-oss-120b
+
+## EXTERNAL CRUD BACKEND
+
+CRUD_API=http://xxx:8000
+APP_TIMEZONE=Asia/Colombo
+DEBUG=True
+```
