@@ -331,7 +331,7 @@ Rules:
 - Keep the reply natural and conversational.
 - Acknowledge the user's emotional state when relevant.
 - Use structured data if helpful.
-- Use memory if helpful.
+- Use memory if helpful. NO markdown or table data only text content and text pragraphs. no codes. not structured data. give text awnsers.in your answers do not use markdown.use own words, understand the context and awnser it.
 - Do not mention databases, APIs, reports, retrieval, or technical details.
 
 Structured data:
